@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Blackjack vs Bot — Basic-Strategy Bot (single file)</title>
+<style>
+  :root{
+    --bg1:#052d24; --bg2:#031811; --panel:rgba(255,255,255,0.06);
+    --accent:#f6b86b; --muted:#cbd5d1;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:Inter, "Segoe UI", Roboto, Arial; background:
+    radial-gradient(1200px 600px at 10% 10%, rgba(0,0,0,0.25), transparent),
+    linear-gradient(180deg,var(--bg1),var(--bg2)); color:#eef6f2;
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    padding:28px;
+  }
+  .table {
+    position:relative;
+    width:100%; max-width:1100px; border-radius:14px; padding:22px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.08));
+    box-shadow: 0 10px 30px rgba(3,6,4,0.6);
+    overflow:visible;
+  }
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  h1{font-size:20px;margin:0}
+  .scores{font-weight:600;color:var(--muted)}
+  .play-area{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}
+  .zone{
+    flex:1 1 300px; background:var(--panel); padding:18px;border-radius:12px;
+    display:flex;flex-direction:column;align-items:center;
+    min-height:180px;
+  }
+  .zone h2{margin:0 0 8px 0;font-size:16px;color:var(--muted)}
+  .cards{display:flex;gap:12px;min-height:110px;align-items:center;justify-content:center;flex-wrap:wrap}
+  .card{
+    width:72px;height:98px;border-radius:10px;background:#fff;color:#111;
+    display:flex;align-items:center;justify-content:center;font-weight:700;
+    font-size:22px;box-shadow:0 8px 20px rgba(0,0,0,0.45); transform:translateY(8px) scale(0);
+    animation:pop 260ms forwards;
+  }
+  @keyframes pop{to{transform:translateY(0) scale(1)}}
+  .hidden{background:linear-gradient(135deg,#333,#111); color:transparent}
+  .controls{display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center}
+  .btn-row{display:flex;gap:12px}
+  button{
+    appearance:none;border:0;padding:10px 18px;border-radius:10px;font-weight:700;cursor:pointer;
+    background:var(--accent); color:#111; box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+  }
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .status{color:var(--muted);min-height:26px;margin-top:8px}
+  .dots::after{content:'';animation:dots 1.2s steps(3,end) infinite}
+  @keyframes dots{0%{content:''}33%{content:'.'}66%{content:'..'}100%{content:'...'}}
+  .footer{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-top:18px;color:var(--muted)}
+  .result{font-weight:800;color:var(--accent)}
+  .small{font-size:13px;color:#aebdb6}
+
+  /* Betting + token styles */
+  .betting { margin-top:10px; display:flex; gap:8px; align-items:center; }
+  .betting input {
+    width:80px; padding:6px; border-radius:6px; border:1px solid #666;
+    background:#111; color:#eee; text-align:center;
+  }
+  .tokens { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; justify-content:center; }
+
+  /* Poker chip styles (denominations) */
+  .chip {
+    position:absolute;
+    width:34px; height:34px; border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-weight:800;
+    color:#fff; font-size:13px; box-shadow:0 6px 14px rgba(0,0,0,0.45);
+    transform-origin:center;
+    transition: transform 700ms cubic-bezier(.2,.9,.2,1), opacity 400ms linear;
+    z-index:30;
+  }
+  .chip-value { font-size:12px; font-weight:800; }
+  .chip.gold { background: radial-gradient(circle at 30% 30%, #ffd76b, #d4a017); border:3px solid #fff; color:#111; } /* 10 */
+  .chip.blue { background: radial-gradient(circle at 30% 30%, #7fb8ff, #0066cc); border:3px solid #fff; }       /* 5 */
+  .chip.green{ background: radial-gradient(circle at 30% 30%, #8ef08e, #1f8f2b); border:3px solid #fff; color:#111;}/*1*/
+
+  /* pot (center) */
+  .pot {
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-5%);
+    width:160px; height:90px; pointer-events:none; z-index:20;
+    display:flex;align-items:center;justify-content:center; gap:4px; flex-wrap:wrap;
+  }
+  .pot .placeholder {
+    color:rgba(255,255,255,0.06); font-size:12px; text-align:center; pointer-events:none;
+  }
+
+  @keyframes glowWin {
+    0%,100% { box-shadow: 0 0 0 rgba(0,0,0,0); }
+    50% { box-shadow: 0 0 25px 6px var(--accent); }
+  }
+  .winner { animation: glowWin 1.6s ease-in-out 2; }
+
+  /* chip fly animation helper classes (we set transforms from JS) */
+  .chip.hide { opacity:0; transition: opacity 300ms linear; }
+
+  /* Restart button */
+  #restartBtn {
+    display:none; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:60;
+    padding:14px 20px; font-size:16px; border-radius:12px; background:#111; color:var(--accent);
+    border:2px solid rgba(255,255,255,0.06); box-shadow:0 10px 30px rgba(0,0,0,0.6);
+  }
+
+</style>
+</head>
+<body>
+  <div class="table" id="tableRoot">
+    <header>
+      <h1>Blackjack vs Bot — Basic-Strategy Bot</h1>
+      <div class="scores">Bot Score: <span id="scb">50</span> &nbsp;|&nbsp; Player Score: <span id="scp">50</span></div>
+    </header>
+
+    <div class="play-area">
+      <div class="zone" id="botZone">
+        <h2>Bot</h2>
+        <div class="cards" id="botCards"></div>
+        <div class="status" id="botStatus"></div>
+      </div>
+
+      <div class="zone" id="playerZone">
+        <h2>Player</h2>
+        <div class="cards" id="playerCards"></div>
+        <div class="controls">
+          <div class="btn-row">
+            <button id="drawBtn">Draw</button>
+            <button id="standBtn">Stand</button>
+            <button id="newRoundBtn">New Round</button>
+          </div>
+          <div class="status small" id="roundInfo">Press "New Round" to start.</div>
+          <!-- Betting controls -->
+          <div class="betting">
+            <input type="number" id="betAmount" min="1" step="1" value="10" />
+            <button id="placeBetBtn">Place Bet</button>
+            <div style="width:10px"></div>
+            <div style="font-size:12px;color:var(--muted)">Denoms: <span style="color:#ffd76b">10</span> <span style="color:#7fb8ff">5</span> <span style="color:#8ef08e">1</span></div>
+          </div>
+          <div id="tokens" class="tokens" aria-hidden="true"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div class="small">Round result: <span id="roundResult" class="result">—</span></div>
+    </div>
+
+    <!-- central pot for chips -->
+    <div id="pot" class="pot"><div class="placeholder">Pot</div></div>
+
+    <!-- restart button -->
+    <button id="restartBtn">Restart Game</button>
+  </div>
+
+<script>
+/* ===========================
+   Full single-file program
+   - Basic-strategy bot (hard + soft totals)
+   - Betting & chip animations
+   - "Bot is thinking..." shown for both draw & stand
+   - Scores adjusted only by bet (no extra -10)
+   =========================== */
+
+/* ---- state & element refs ---- */
+let scp = 50, scb = 50;
+const scpEl = document.getElementById('scp');
+const scbEl = document.getElementById('scb');
+const botCardsEl = document.getElementById('botCards');
+const playerCardsEl = document.getElementById('playerCards');
+const botStatusEl = document.getElementById('botStatus');
+const roundInfoEl = document.getElementById('roundInfo');
+const roundResultEl = document.getElementById('roundResult');
+const drawBtn = document.getElementById('drawBtn');
+const standBtn = document.getElementById('standBtn');
+const newRoundBtn = document.getElementById('newRoundBtn');
+
+let player = [], bot = [];
+let c1 = 1, c2 = 0;
+let roundActive = false;
+let botThinkingTimeout = null;
+let currentTurn = "player";
+
+let currentBet = 10;
+const betInput = document.getElementById('betAmount');
+const betBtn = document.getElementById('placeBetBtn');
+const tokensEl = document.getElementById('tokens');
+
+/* ---- betting UI ---- */
+betBtn.addEventListener('click', () => {
+  const val = parseInt(betInput.value);
+  if (isNaN(val) || val <= 0) {
+    roundInfoEl.textContent = "Invalid bet!";
+    return;
+  }
+  if (val > scp) {
+    roundInfoEl.textContent = "You cannot bet more than your score!";
+    return;
+  }
+  currentBet = val;
+  tokensEl.innerHTML = '';
+  const breakdown = chipBreakdown(currentBet);
+  for (const {denom, count} of breakdown) {
+    for (let i=0;i<count;i++){
+      const mini = document.createElement('div');
+      mini.style.width='18px'; mini.style.height='18px'; mini.style.borderRadius='50%';
+      mini.style.margin='2px'; mini.style.display='inline-block';
+      if(denom===10){ mini.style.background='#ffd76b'; mini.style.border='1.5px solid #fff' }
+      else if(denom===5){ mini.style.background='#7fb8ff'; mini.style.border='1.5px solid #fff' }
+      else { mini.style.background='#8ef08e'; mini.style.border='1.5px solid #fff' ; mini.style.color='#111'}
+      tokensEl.appendChild(mini);
+    }
+  }
+  roundInfoEl.textContent = `You prepared a bet of ${currentBet} points. Press "New Round" to deal.`;
+});
+
+/* ---- utility functions (kept faithful) ---- */
+function exist(v1, v2, x) {
+  return !v1.includes(x) && !v2.includes(x);
+}
+function begin_fill(v1, v2) {
+  for (let i = 0; i < 2; i++) {
+    let card; do { card = Math.floor(Math.random()*11)+1; } while(!exist(v1,v2,card));
+    v1.push(card);
+  }
+  for (let i = 0; i < 2; i++) {
+    let card; do { card = Math.floor(Math.random()*11)+1; } while(!exist(v1,v2,card));
+    v2.push(card);
+  }
+}
+function sum(arr){return arr.reduce((a,b)=>a+b,0);}
+function elCard(value, hidden=false){
+  const d=document.createElement('div');
+  d.className='card'+(hidden?' hidden':'');
+  d.textContent=hidden?'?':value;
+  return d;
+}
+function renderHands(){
+  botCardsEl.innerHTML='';
+  if(bot.length>0){
+    botCardsEl.appendChild(elCard(bot[0],true));
+    for(let i=1;i<bot.length;i++) botCardsEl.appendChild(elCard(bot[i]));
+  }
+  playerCardsEl.innerHTML='';
+  player.forEach(v=>playerCardsEl.appendChild(elCard(v)));
+  scpEl.textContent=scp; scbEl.textContent=scb;
+}
+function setControlsForTurn(){
+  if(!roundActive){drawBtn.disabled=true;standBtn.disabled=true;newRoundBtn.disabled=false;return;}
+  if(currentTurn==="player"){drawBtn.disabled=false;standBtn.disabled=false;newRoundBtn.disabled=true;}
+  else{drawBtn.disabled=true;standBtn.disabled=true;}
+}
+function userDraw(){
+  if(!roundActive||currentTurn!=="player")return;
+  if(sum(player)<21){
+    let card; do{card=Math.floor(Math.random()*11)+1;}while(!exist(player,bot,card));
+    player.push(card);
+    renderHands();
+    roundInfoEl.textContent="You drew "+card;
+  }
+  currentTurn="bot"; setControlsForTurn(); proceedTurn();
+}
+function userStand(){
+  if(!roundActive||currentTurn!=="player")return;
+  c1=0; roundInfoEl.textContent="You stood.";
+  currentTurn="bot"; setControlsForTurn(); proceedTurn();
+}
+
+/* ===========================
+   BASIC-STRATEGY BOT (Hard & Soft)
+   - This is a compact, correct implementation for your game deck (1..11).
+   - 11 treated as Ace which can be 1 or 11.
+   =========================== */
+
+/* Return {total, soft} for a hand where 11 counts as Ace (11 or 1). */
+function handTotalAndSoft(cards){
+  if(!cards || cards.length===0) return {total:0, soft:false};
+  let total=0, aces=0;
+  for(const c of cards){
+    if(c===11){ total+=11; aces++; } else total+=c;
+  }
+  while(total>21 && aces>0){
+    total -= 10; // convert an Ace from 11 to 1
+    aces--;
+  }
+  const soft = (cards.some(x=>x===11) && total<=21 && (cards.filter(x=>x===11).length > aces));
+  return { total, soft };
+}
+
+/* Dealer upcard: in your display the bot's first card is hidden,
+   but in logic we need bot to see player's upcard (player[0]) — keep previous assumption:
+   we will use player's first card as the upcard for bot's decision, same as before.
+*/
+function getOpponentUpcardValue(){
+  if(player.length === 0) return 10; // fallback
+  const up = player[0];
+  return up === 11 ? 11 : up;
+}
+
+/* Full basic strategy decision for hit/stand (no splits).
+   Returns true if bot should HIT (draw), false to STAND.
+   Strategy covers hard totals and soft totals.
+*/
+function botShouldHit(botHand, dealerUpcard){
+  const {total, soft} = handTotalAndSoft(botHand);
+
+  // Soft totals (Ace counted as 11 currently)
+  if(soft){
+    if(total >= 19) return false; // soft 19+ stand
+    if(total === 18){
+      // soft 18: stand vs dealer 2-8, hit vs 9,10,A
+      if([9,10,11].includes(dealerUpcard)) return true;
+      return false;
+    }
+    // soft 17 or less -> hit
+    return true;
+  }
+
+  // Hard totals
+  if(total <= 11) return true;
+  if(total >= 17) return false;
+  // 12-16: stand if dealer 2..6, else hit
+  if(total >=12 && total <=16){
+    if(dealerUpcard >=2 && dealerUpcard <=6) return false;
+    return true;
+  }
+  // default: hit
+  return true;
+}
+
+/* ===========================
+   UPDATED proceedTurn: uses basic strategy
+   Always show "Bot is thinking..." (draw or stand)
+   =========================== */
+function proceedTurn(){
+  if(!roundActive||currentTurn!=="bot")return;
+
+  // determine dealer upcard (we treat player's first card as upcard proxy)
+  const upcard = getOpponentUpcardValue();
+
+  // get decision from basic strategy
+  const shouldHit = botShouldHit(bot, upcard);
+  c2 = shouldHit ? 1 : 0;
+
+  // Always show thinking first
+  botStatusEl.textContent="Bot is thinking";
+  botStatusEl.classList.add('dots');
+
+  if(botThinkingTimeout){ clearTimeout(botThinkingTimeout); botThinkingTimeout = null; }
+  botThinkingTimeout = setTimeout(()=>{
+    botStatusEl.classList.remove('dots');
+    botStatusEl.textContent='';
+
+    if(c2===1){
+      // Bot draws
+      let card; do{ card=Math.floor(Math.random()*11)+1; } while(!exist(player,bot,card));
+      bot.push(card);
+      renderHands();
+      roundInfoEl.textContent="Bot drew a card.";
+      currentTurn="player";
+      setControlsForTurn();
+      if(c1===0) proceedTurn(); // if player already stood, continue
+    } else {
+      // Bot stands
+      roundInfoEl.textContent="Bot stands.";
+      if(c1===0 && c2===0) finalizeRound();
+      else { currentTurn="player"; setControlsForTurn(); }
+    }
+  }, 1500); // thinking delay
+}
+
+/* ===========================
+   Chips / Pot / Animations (same as previous)
+   =========================== */
+const pot = document.getElementById('pot');
+const tableRoot = document.getElementById('tableRoot');
+const restartBtn = document.getElementById('restartBtn');
+
+function chipBreakdown(amount){
+  const out=[];
+  let rem = amount;
+  const tens = Math.floor(rem/10); rem -= tens*10;
+  const fives = Math.floor(rem/5); rem -= fives*5;
+  const ones = rem;
+  if(tens>0) out.push({denom:10,count:tens});
+  if(fives>0) out.push({denom:5,count:fives});
+  if(ones>0) out.push({denom:1,count:ones});
+  return out;
+}
+
+function createChipElement(owner, denom){
+  const el = document.createElement('div');
+  el.className = 'chip ' + (denom===10 ? 'gold' : denom===5 ? 'blue' : 'green');
+  el.dataset.owner = owner;
+  el.dataset.denom = denom;
+  el.innerHTML = '<span class="chip-value">'+denom+'</span>';
+  const tableRect = tableRoot.getBoundingClientRect();
+  if(owner==='player'){
+    el.style.left = (tableRect.left + tableRect.width*0.65) + 'px';
+    el.style.top  = (tableRect.top + tableRect.height*0.7) + 'px';
+  } else {
+    el.style.left = (tableRect.left + tableRect.width*0.35) + 'px';
+    el.style.top  = (tableRect.top + tableRect.height*0.2) + 'px';
+  }
+  el.style.transform = 'translate(-50%,-50%) scale(0)';
+  document.body.appendChild(el);
+  requestAnimationFrame(()=> {
+    el.style.transition = 'transform 450ms cubic-bezier(.2,.9,.2,1), left 450ms, top 450ms';
+    const potRect = pot.getBoundingClientRect();
+    el.style.left = (potRect.left + potRect.width/2 + (Math.random()*30-15)) + 'px';
+    el.style.top  = (potRect.top + potRect.height/2 + (Math.random()*20-10)) + 'px';
+    el.style.transform = 'translate(-50%,-50%) scale(1)';
+  });
+  return el;
+}
+
+function placeBetIntoPot(amount){
+  pot.querySelectorAll('.placeholder').forEach(n=>n.remove());
+  const breakdown = chipBreakdown(amount);
+  for(const {denom,count} of breakdown){
+    for(let i=0;i<count;i++){
+      createChipElement('player', denom);
+    }
+  }
+  const botBreakdown = chipBreakdown(amount);
+  for(const {denom,count} of botBreakdown){
+    for(let i=0;i<count;i++){
+      createChipElement('bot', denom);
+    }
+  }
+}
+
+function moveChipsToWinner(winner){
+  const chips = Array.from(document.querySelectorAll('.chip'));
+  if(chips.length===0) return;
+  const targetZone = winner==='player' ? document.getElementById('playerZone') : document.getElementById('botZone');
+  const targetRect = targetZone.getBoundingClientRect();
+  chips.forEach((ch, idx) => {
+    const tx = targetRect.left + targetRect.width/2 + (Math.random()*60-30);
+    const ty = targetRect.top + targetRect.height*0.55 + (winner==='bot' ? -20 : 10) + (Math.random()*30-15);
+    ch.style.zIndex = 60 + idx;
+    setTimeout(()=>{
+      ch.style.left = tx + 'px';
+      ch.style.top  = ty + 'px';
+      ch.style.transform = 'translate(-50%,-50%) scale(1.1)';
+      ch.style.opacity = '1';
+    }, idx * 60);
+    setTimeout(() => {
+      ch.style.transition = 'opacity 300ms linear';
+      ch.style.opacity = '0';
+      setTimeout(()=> ch.remove(), 350);
+    }, 900 + idx*60);
+  });
+}
+
+function clearPot(){
+  document.querySelectorAll('.chip').forEach(c=>c.remove());
+  pot.innerHTML = '<div class="placeholder">Pot</div>';
+}
+
+/* ===========================
+   FINALIZE ROUND (fixed to use bets only)
+   - removes old -10 penalties and uses bet to adjust scores
+   =========================== */
+function finalizeRound(){
+  roundActive=false; setControlsForTurn();
+  const sump=sum(player), sumb=sum(bot);
+  renderHands();
+
+  let winner = 'draw';
+  if(sump===sumb){
+    roundResultEl.textContent="Draw";
+  } else if(sump<=21 && sumb<=21){
+    if(sump>sumb){
+      roundResultEl.textContent="Player wins!"; scp += currentBet; scb -= currentBet; winner='player';
+    } else {
+      roundResultEl.textContent="Bot wins!"; scp -= currentBet; scb += currentBet; winner='bot';
+    }
+  } else if(sump>21 && sumb>21){
+    // both busted: smaller total wins
+    if(sump < sumb){
+      roundResultEl.textContent="Player wins!"; scp += currentBet; scb -= currentBet; winner='player';
+    } else {
+      roundResultEl.textContent="Bot wins!"; scp -= currentBet; scb += currentBet; winner='bot';
+    }
+  } else if(sump<=21 && sumb>21){
+    roundResultEl.textContent="Player wins!"; scp += currentBet; scb -= currentBet; winner='player';
+  } else {
+    roundResultEl.textContent="Bot wins!"; scp -= currentBet; scb += currentBet; winner='bot';
+  }
+
+  const playerZone=document.getElementById('playerZone');
+  const botZone=document.getElementById('botZone');
+  if(winner==='player') playerZone.classList.add('winner');
+  else if(winner==='bot') botZone.classList.add('winner');
+
+  scpEl.textContent=scp; scbEl.textContent=scb;
+  roundInfoEl.textContent=`Player: ${sump} — Bot: ${sumb}`;
+
+  // Reveal bot hidden card
+  const hiddenCard = botCardsEl.querySelector('.hidden');
+  if (hiddenCard) {
+    setTimeout(() => {
+      hiddenCard.classList.remove('hidden');
+      hiddenCard.textContent = bot[0];
+    }, 800);
+  }
+
+  // after a short delay, move chips to winner
+  setTimeout(()=>{
+    if(winner==='draw'){
+      const all = Array.from(document.querySelectorAll('.chip'));
+      all.forEach((ch, i)=>{
+        setTimeout(()=>{ ch.style.opacity='0'; setTimeout(()=>ch.remove(),350); }, i*40);
+      });
+    } else {
+      moveChipsToWinner(winner);
+    }
+  }, 900);
+
+  // remove winner glow after a while
+  setTimeout(()=>{
+    playerZone.classList.remove('winner');
+    botZone.classList.remove('winner');
+  }, 4000);
+
+  setTimeout(()=>{
+    clearPot();
+    if(!(scp>=0 && scb>=0)){
+      restartBtn.style.display='block';
+    } else {
+      roundInfoEl.textContent = 'Round finished. Press "New Round" to play again.';
+      newRoundBtn.disabled = false;
+      drawBtn.disabled = true;
+      standBtn.disabled = true;
+    }
+  }, 1600);
+}
+
+/* ===========================
+   Round lifecycle helpers
+   =========================== */
+function startNewRound(){
+  if(!(scp>=0&&scb>=0))return;
+  if(currentBet <= 0 || currentBet > scp){
+    currentBet = Math.min(10, scp);
+    betInput.value = currentBet;
+  }
+  placeBetIntoPot(currentBet);
+  player=[]; bot=[]; c1=1;c2=0; roundActive=true; currentTurn="player";
+  roundResultEl.textContent="—"; botStatusEl.textContent=''; roundInfoEl.textContent="Round started. Player to act.";
+  begin_fill(player,bot); renderHands(); setControlsForTurn();
+}
+
+function resetGame(){
+  scp = 50; scb = 50;
+  scpEl.textContent = scp; scbEl.textContent = scb;
+  currentBet = 10; betInput.value = 10;
+  roundResultEl.textContent = '—';
+  roundInfoEl.textContent = 'Game reset. Place a bet and press New Round.';
+  clearPot();
+  restartBtn.style.display='none';
+  setControlsForTurn();
+  player = []; bot = []; c1=1; c2=0; roundActive=false; currentTurn='player';
+  renderHands();
+}
+
+/* ---- wiring ---- */
+restartBtn.addEventListener('click', () => resetGame());
+drawBtn.addEventListener('click', userDraw);
+standBtn.addEventListener('click', userStand);
+newRoundBtn.addEventListener('click', startNewRound);
+
+/* initial */
+setControlsForTurn();
+pot.innerHTML = '<div class="placeholder">Pot</div>';
+</script>
+</body>
+</html>
