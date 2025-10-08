@@ -1,4 +1,4 @@
-<!doctype html>
+z<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -32,6 +32,8 @@
     flex:1 1 300px; background:var(--panel); padding:18px;border-radius:12px;
     display:flex;flex-direction:column;align-items:center;
     min-height:180px;
+    
+
   }
   .zone h2{margin:0 0 8px 0;font-size:16px;color:var(--muted)}
   .cards{display:flex;gap:12px;min-height:110px;align-items:center;justify-content:center;flex-wrap:wrap}
@@ -105,6 +107,13 @@
     padding:14px 20px; font-size:16px; border-radius:12px; background:#111; color:var(--accent);
     border:2px solid rgba(255,255,255,0.06); box-shadow:0 10px 30px rgba(0,0,0,0.6);
   }
+.sum-display {
+  font-size: 22px;
+  font-weight: 800;
+  margin-top: 6px;
+  color: var(--accent);
+  text-shadow: 0 0 8px rgba(246,184,107,0.4);
+}
 
 </style>
 </head>
@@ -117,20 +126,32 @@
 
     <div class="play-area">
       <div class="zone" id="botZone">
-        <h2>Bot</h2>
-        <div class="cards" id="botCards"></div>
-        <div class="status" id="botStatus"></div>
+      <h2>Bot</h2>
+      <div class="cards" id="botCards"></div>
+      <div class="status" id="botStatus"></div>
+      <div class="sum-display" id="botSum"></div>
       </div>
 
+
       <div class="zone" id="playerZone">
-        <h2>Player</h2>
-        <div class="cards" id="playerCards"></div>
-        <div class="controls">
-          <div class="btn-row">
-            <button id="drawBtn">Draw</button>
-            <button id="standBtn">Stand</button>
-            <button id="newRoundBtn">New Round</button>
-          </div>
+  <h2>Player</h2>
+  <div class="cards" id="playerCards"></div>
+  <div class="controls">
+    <div class="btn-row">
+      <button id="drawBtn">Draw</button>
+      <button id="standBtn">Stand</button>
+      <button id="newRoundBtn">New Round</button>
+    </div>
+    <div class="status small" id="roundInfo">Press "New Round" to start.</div>
+    <div class="betting">
+      <input type="number" id="betAmount" min="1" step="1" value="10" />
+      <button id="placeBetBtn">Place Bet</button>
+    </div>
+    <div id="tokens" class="tokens"></div>
+  </div>
+  <div class="sum-display" id="playerSum"></div>
+</div>
+
           <div class="status small" id="roundInfo">Press "New Round" to start.</div>
           <!-- Betting controls -->
           <div class="betting">
@@ -243,10 +264,23 @@ function renderHands(){
     botCardsEl.appendChild(elCard(bot[0],true));
     for(let i=1;i<bot.length;i++) botCardsEl.appendChild(elCard(bot[i]));
   }
+
   playerCardsEl.innerHTML='';
   player.forEach(v=>playerCardsEl.appendChild(elCard(v)));
-  scpEl.textContent=scp; scbEl.textContent=scb;
+
+  scpEl.textContent=scp; 
+  scbEl.textContent=scb;
+
+  // --- Display sums ---
+  const playerSum = sum(player);
+  const botVisibleSum = bot.length > 1 ? sum(bot.slice(1)) : 0;
+
+  document.getElementById('playerSum').textContent = `Player Total: ${playerSum}`;
+  document.getElementById('botSum').textContent = `Bot Total: ${botVisibleSum} + ?`;
 }
+
+
+
 function setControlsForTurn(){
   if(!roundActive){drawBtn.disabled=true;standBtn.disabled=true;newRoundBtn.disabled=false;return;}
   if(currentTurn==="player"){drawBtn.disabled=false;standBtn.disabled=false;newRoundBtn.disabled=true;}
